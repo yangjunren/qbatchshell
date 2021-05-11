@@ -89,14 +89,3 @@ def listBucket(access_key, secret_key, bucket, file_path, prefix=None, start=Non
         except Exception as e:
             logger.wran(e)
             raise e
-
-
-if __name__ == '__main__':
-    with open("../.qcmd/.account.json", "r") as f:
-        ret = f.read().split(":")
-    accesskey = ret[1]
-    secretkey = ret[2]
-    bucket_name = "upload30"
-    listfile = "./list.txt"
-    start = "1619606052"
-    listBucket(accesskey, secretkey, bucket_name, listfile, start=start)
