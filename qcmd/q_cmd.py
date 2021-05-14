@@ -13,6 +13,7 @@ rootPath = os.path.split(curPath)[0]
 sys.path.append(rootPath)
 from qcmd import qcmd_global
 from qcmd.listbucket import listBucket
+from qcmd.bmodtype import Batch_modtype
 
 _version = qcmd_global.Version
 
@@ -134,6 +135,17 @@ def qcmd_thread():
     parser_listbucket.add_argument("-sf", "--suffix", help="file suffix", type=str, default=None)
     parser_listbucket.set_defaults(func=Qcmd.list_bucket)
 
+    parser_bmodtype = sub_parser.add_parser("bmodtype", help="Batch modify file storage type")
+    parser_bmodtype.add_argument("-b", "--bucket", help="bucket name", required=True, type=str)
+    parser_bmodtype.add_argument("-i", "--inputfile", help="input file", required=True, type=str)
+    parser_bmodtype.add_argument("-s", "--successfile", help="change storage type success file list", type=str,
+                                 default=None)
+    parser_bmodtype.add_argument("-f", "--failurefile", help="change storage type failure file list", type=str,
+                                 default=None)
+    parser_bmodtype.add_argument("-tc", "--threadcount", help="multiple thread count", type=int,
+                                 default=3)
+    parser_bmodtype.set_defaults(func=Qcmd.batch_modtype)
+
     args = parser.parse_args()
     try:
         res = args.func(args)
@@ -191,6 +203,28 @@ class Qcmd(object):
                 fileType = args.fileType
                 suffix = args.suffix
                 listBucket(accesskey, secretkey, bucket_name, outfile, prefix, start, end, fileType, suffix)
+            else:
+                return print("Login please enter \"qcmd account -h\" for help")
+        except Exception as e:
+            logger.warn(e)
+            raise e
+
+    @staticmethod
+    def batch_modtype(args):
+        try:
+            if os.path.exists("./.qcmd/.account.json"):
+                with open("./.qcmd/.account.json", "r") as f:
+                    ret = f.read().split(":")
+                    accesskey = ret[1]
+                    secretkey = ret[2]
+                bucket_name = args.bucket
+                inputfile = args.inputfile
+                successfile = args.successfile
+                failurefile = args.failurefile
+                threadcount = args.threadcount
+                Batch = Batch_modtype(accesskey, secretkey, bucket_name, inputfile, successfile, failurefile,
+                                      threadcount)
+                Batch.b_modtype()
             else:
                 return print("Login please enter \"qcmd account -h\" for help")
         except Exception as e:

@@ -2,7 +2,7 @@
 
 from qiniu import Auth
 from qiniu import BucketManager
-import logging, lmdb
+import logging
 
 logger = logging.getLogger("qcmd")
 
@@ -25,17 +25,25 @@ def _write_file(file_path, i):
                 f.writelines(str(value) + "\n")
 
 
+def _filter_suffix(file_path, i, fileType, suffix):
+    if ";" in suffix:
+        suffix_tuple = tuple(suffix.split(";"))
+        if str(i.get("key")).endswith(suffix_tuple) and str(i.get("mimeType")) in fileType:
+            _write_file(file_path, i)
+    else:
+        if str(i.get("key")).endswith(suffix) and str(i.get("mimeType")) in fileType:
+            _write_file(file_path, i)
+
+
 def _filter_filetype_suffix(file_path, i, fileType, suffix):
     """根据文件类型和文件名后缀过滤文件"""
     if fileType and suffix:
-        if str(i.get("key")).endswith(suffix) and str(i.get("mimeType")) == fileType:
-            _write_file(file_path, i)
+        _filter_suffix(file_path, i, fileType, suffix)
     elif fileType and suffix is None:
-        if str(i.get("mimeType")) == fileType:
+        if str(i.get("mimeType")) in fileType:
             _write_file(file_path, i)
     elif fileType is None and suffix:
-        if str(i.get("key")).endswith(suffix):
-            _write_file(file_path, i)
+        _filter_suffix(file_path, i, fileType, suffix)
     else:
         _write_file(file_path, i)
 
