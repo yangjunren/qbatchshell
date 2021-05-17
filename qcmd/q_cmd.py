@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
 from threading import Thread
-from six.moves.configparser import SafeConfigParser
 from six import text_type
 from argparse import ArgumentParser
-from logging.handlers import RotatingFileHandler
-import os, shutil, sys, json, logging, lmdb
+import os, shutil, sys, logging, lmdb
 
 global res
 
@@ -14,6 +12,7 @@ sys.path.append(rootPath)
 from qcmd import qcmd_global
 from qcmd.listbucket import listBucket
 from qcmd.bmodtype import Batch_modtype
+from qcmd.bchstatus import Batch_chstatus
 
 _version = qcmd_global.Version
 
@@ -133,6 +132,8 @@ def qcmd_thread():
     parser_listbucket.add_argument("-e", "--end", help="end timeStamp", type=str, default=None)
     parser_listbucket.add_argument("-ft", "--fileType", help="file mimeType", type=str, default=None)
     parser_listbucket.add_argument("-sf", "--suffix", help="file suffix", type=str, default=None)
+    parser_listbucket.add_argument("--fsize", help="fsize", type=bool, default=False)
+    parser_listbucket.add_argument("--stype", help="storage type", type=int, default=-1)
     parser_listbucket.set_defaults(func=Qcmd.list_bucket)
 
     parser_bmodtype = sub_parser.add_parser("bmodtype", help="Batch modify file storage type")
@@ -144,7 +145,20 @@ def qcmd_thread():
                                  default=None)
     parser_bmodtype.add_argument("-tc", "--threadcount", help="multiple thread count", type=int,
                                  default=3)
+    parser_bmodtype.add_argument("-S", "--sep", help="separator", type=str, default=",")
     parser_bmodtype.set_defaults(func=Qcmd.batch_modtype)
+
+    parser_chstatus = sub_parser.add_parser("bchstatus", help="Batch modify file status")
+    parser_chstatus.add_argument("-b", "--bucket", help="bucket name", required=True, type=str)
+    parser_chstatus.add_argument("-i", "--inputfile", help="input file", required=True, type=str)
+    parser_chstatus.add_argument("-s", "--successfile", help="change storage type success file list", type=str,
+                                 default=None)
+    parser_chstatus.add_argument("-f", "--failurefile", help="change storage type failure file list", type=str,
+                                 default=None)
+    parser_chstatus.add_argument("-tc", "--threadcount", help="multiple thread count", type=int,
+                                 default=3)
+    parser_chstatus.add_argument("-S", "--sep", help="separator", type=str, default=",")
+    parser_chstatus.set_defaults(func=Qcmd.batch_chstatus)
 
     args = parser.parse_args()
     try:
@@ -202,7 +216,10 @@ class Qcmd(object):
                 end = args.end
                 fileType = args.fileType
                 suffix = args.suffix
-                listBucket(accesskey, secretkey, bucket_name, outfile, prefix, start, end, fileType, suffix)
+                fsize = args.fsize
+                stype = args.stype
+                listBucket(accesskey, secretkey, bucket_name, outfile, prefix, start, end, fileType, suffix, fsize,
+                           stype)
             else:
                 return print("Login please enter \"qcmd account -h\" for help")
         except Exception as e:
@@ -222,11 +239,33 @@ class Qcmd(object):
                 successfile = args.successfile
                 failurefile = args.failurefile
                 threadcount = args.threadcount
-                Batch = Batch_modtype(accesskey, secretkey, bucket_name, inputfile, successfile, failurefile,
+                sep = args.sep
+                Batch = Batch_modtype(accesskey, secretkey, bucket_name, inputfile, sep, successfile, failurefile,
                                       threadcount)
                 Batch.b_modtype()
             else:
                 return print("Login please enter \"qcmd account -h\" for help")
+        except Exception as e:
+            logger.warn(e)
+            raise e
+
+    @staticmethod
+    def batch_chstatus(args):
+        try:
+            if os.path.exists("./.qcmd/.account.json"):
+                with open("./.qcmd/.account.json", "r") as f:
+                    ret = f.read().split(":")
+                    accesskey = ret[1]
+                    secretkey = ret[2]
+                bucket_name = args.bucket
+                inputfile = args.inputfile
+                successfile = args.successfile
+                failurefile = args.failurefile
+                threadcount = args.threadcount
+                sep = args.sep
+                Batch = Batch_chstatus(accesskey, secretkey, bucket_name, inputfile, sep, successfile, failurefile,
+                                       threadcount)
+                Batch.batch_chstatus()
         except Exception as e:
             logger.warn(e)
             raise e

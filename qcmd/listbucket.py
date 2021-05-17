@@ -35,8 +35,31 @@ def _filter_suffix(file_path, i, fileType, suffix):
             _write_file(file_path, i)
 
 
+def _filter_fsize(file_path, i, fileType, suffix, fsize):
+    """过滤大小为0的文件"""
+    if fsize:
+        if i.get("fsize") == 0:
+            _write_file(file_path, i)
+    else:
+        _filter_filetype_suffix(file_path, i, fileType, suffix)
+
+
+def _filter_Storagetype(file_path, i, fileType, suffix, fsize, stype):
+    if stype == -1:
+        _filter_fsize(file_path, i, fileType, suffix, fsize)
+    elif stype == 0:
+        if i.get("type") == 0:
+            _filter_fsize(file_path, i, fileType, suffix, fsize)
+    elif stype == 1:
+        if i.get("type") == 1:
+            _filter_fsize(file_path, i, fileType, suffix, fsize)
+    elif stype == 2:
+        if i.get("type") == 2:
+            _filter_fsize(file_path, i, fileType, suffix, fsize)
+
+
 def _filter_filetype_suffix(file_path, i, fileType, suffix):
-    """根据文件类型和文件名后缀过滤文件"""
+    """根据文件类型/文件名后缀 过滤文件"""
     if fileType and suffix:
         _filter_suffix(file_path, i, fileType, suffix)
     elif fileType and suffix is None:
@@ -48,30 +71,30 @@ def _filter_filetype_suffix(file_path, i, fileType, suffix):
         _write_file(file_path, i)
 
 
-def _filter_listinfo(ret, file_path, start=None, end=None, fileType=None, suffix=None):
+def _filter_listinfo(ret, file_path, start=None, end=None, fileType=None, suffix=None, fsize=False, stype=-1):
     for i in ret.get("items")[1:]:
         putTime = str(i.get("putTime"))[:10]
         if start and end is None:
             if putTime > start:
-                _filter_filetype_suffix(file_path, i, fileType, suffix)
+                _filter_Storagetype(file_path, i, fileType, suffix, fsize, stype)
         elif end and start is None:
             if putTime < end:
-                _filter_filetype_suffix(file_path, i, fileType, suffix)
+                _filter_Storagetype(file_path, i, fileType, suffix, fsize, stype)
         elif start and end:
-            _filter_filetype_suffix(file_path, i, fileType, suffix)
+            _filter_Storagetype(file_path, i, fileType, suffix, fsize, stype)
         else:
-            _filter_filetype_suffix(file_path, i, fileType, suffix)
+            _filter_Storagetype(file_path, i, fileType, suffix, fsize, stype)
 
 
 def _list(access_key, secret_key, bucket_name, file_path, prefix, start, end, fileType, suffix, limit=1000,
           delimiter=None,
-          marker=None):
+          marker=None, fsize=False, stype=-1):
     q = Auth(access_key, secret_key)
     bucket = BucketManager(q)
     ret, eof, info = bucket.list(bucket_name, prefix, marker, limit, delimiter)
     if eof:
         marker = None
-        _filter_listinfo(ret, file_path, start, end, fileType, suffix)
+        _filter_listinfo(ret, file_path, start, end, fileType, suffix, fsize, stype)
     else:
         if info.status_code == 200:
             marker = ret.get("marker")
@@ -79,9 +102,9 @@ def _list(access_key, secret_key, bucket_name, file_path, prefix, start, end, fi
 
 
 def listBucket(access_key, secret_key, bucket, file_path, prefix=None, start=None, end=None, fileType=None,
-               suffix=None):
+               suffix=None, fsize=False, stype=-1):
     ret, marker, info = _list(access_key, secret_key, bucket, file_path, prefix=prefix, start=start, end=end,
-                              fileType=fileType, suffix=suffix)
+                              fileType=fileType, suffix=suffix, fsize=fsize, stype=stype)
     while True:
         try:
             if info.status_code != 200:
@@ -92,7 +115,8 @@ def listBucket(access_key, secret_key, bucket, file_path, prefix=None, start=Non
                 return print("listbucket success")
             else:
                 ret, marker_new, info = _list(access_key, secret_key, bucket, marker=marker, file_path=file_path,
-                                              prefix=prefix, start=start, end=end, fileType=fileType, suffix=suffix)
+                                              prefix=prefix, start=start, end=end, fileType=fileType, suffix=suffix,
+                                              fsize=fsize, stype=stype)
             marker = marker_new
         except Exception as e:
             logger.wran(e)

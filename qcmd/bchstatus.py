@@ -1,10 +1,8 @@
 # -*- coding: utf-8 -*-
-# flake8: noqa
 
 from qiniu import Auth
 from qiniu import BucketManager
-import os, sys, time
-import logging
+import logging, os, sys, time
 
 curPath = os.path.abspath(os.path.dirname(__file__))
 rootPath = os.path.split(curPath)[0]
@@ -15,7 +13,7 @@ from qcmd.util import to_unicode
 logger = logging.getLogger("qcmd")
 
 
-class Batch_modtype(object):
+class Batch_chstatus(object):
     def __init__(self, access_key, secret_key, bucket_name, inputfile, sep, successfile=None,
                  failurefile=None, thread_count=3):
         self.access_key = access_key
@@ -28,23 +26,23 @@ class Batch_modtype(object):
         self.failurefile = failurefile
         self.sep = sep
 
-    def mod_type(self, bucket_name, key, storage_type, successfile, failurefile):
-        try:
-            q = Auth(self.access_key, self.secret_key)
-            bucket = BucketManager(q)
-            # 2表示归档存储，1表示低频存储，0是标准存储
-            _, info = bucket.change_type(bucket_name, key, storage_type)
-            return key, info, successfile, failurefile
-        except Exception as e:
-            logger.warn(to_unicode(e))
-            time.sleep(0.1)
-
     def read_inputfile(self, inputfile):
         with open(inputfile, "r") as f:
             ret = tuple(f.readlines())
         return ret
 
-    def b_modtype(self):
+    def _chstatus(self, bucket_name, key, file_status, successfile, failurefile):
+        try:
+            q = Auth(self.access_key, self.secret_key)
+            bucket = BucketManager(q)
+            # 2表示归档存储，1表示低频存储，0是标准存储
+            _, info = bucket.change_status(bucket_name, key, file_status, cond=None)
+            return key, info, successfile, failurefile
+        except Exception as e:
+            logger.warn(to_unicode(e))
+            time.sleep(0.1)
+
+    def batch_chstatus(self):
         self._inner_threadpool = SimpleThreadPool(self.thread_count)
         inputfile_list = self.read_inputfile(self.inputfile)
         for i in inputfile_list:
@@ -56,9 +54,9 @@ class Batch_modtype(object):
                 logger.warn(to_unicode(e))
                 raise e
             _key = _i[0]
-            _storage_type = _i[1]
+            _file_status = _i[1]
             try:
-                self._inner_threadpool.add_task(self.mod_type, self.bucket_name, _key, _storage_type, self.successfile,
+                self._inner_threadpool.add_task(self._chstatus, self.bucket_name, _key, _file_status, self.successfile,
                                                 self.failurefile)
             except Exception as e:
                 logger.warn(to_unicode(e))
@@ -72,7 +70,7 @@ if __name__ == '__main__':
     secret_key = "*****"
     bucket_name = "*****"
     inputfile = "******"
-    successfile = None
-    Batch = Batch_modtype(access_key, secret_key, bucket_name, inputfile, successfile)
-    ret = Batch.b_modtype()
+    sep = ","
+    Batch = Batch_chstatus(access_key, secret_key, bucket_name, inputfile, sep)
+    ret = Batch.batch_chstatus()
     print(ret)
