@@ -2,7 +2,7 @@
 from threading import Thread
 from six import text_type
 from argparse import ArgumentParser
-import os, shutil, sys, logging, lmdb
+import os, shutil, sys, logging, lmdb, time
 
 global res
 
@@ -13,6 +13,8 @@ from qcmd import qcmd_global
 from qcmd.listbucket import listBucket
 from qcmd.bmodtype import Batch_modtype
 from qcmd.bchstatus import Batch_chstatus
+from qcmd.bupload import Batch_upload
+from qcmd.bdelete import Batch_delete
 
 _version = qcmd_global.Version
 
@@ -140,9 +142,9 @@ def qcmd_thread():
     parser_bmodtype.add_argument("-b", "--bucket", help="bucket name", required=True, type=str)
     parser_bmodtype.add_argument("-i", "--inputfile", help="input file", required=True, type=str)
     parser_bmodtype.add_argument("-s", "--successfile", help="change storage type success file list", type=str,
-                                 default=None)
+                                 default="./bmodtype/modtype_success.txt")
     parser_bmodtype.add_argument("-f", "--failurefile", help="change storage type failure file list", type=str,
-                                 default=None)
+                                 default="./bmodtype/modtype_failed.txt")
     parser_bmodtype.add_argument("-tc", "--threadcount", help="multiple thread count", type=int,
                                  default=3)
     parser_bmodtype.add_argument("-S", "--sep", help="separator", type=str, default=",")
@@ -152,13 +154,34 @@ def qcmd_thread():
     parser_chstatus.add_argument("-b", "--bucket", help="bucket name", required=True, type=str)
     parser_chstatus.add_argument("-i", "--inputfile", help="input file", required=True, type=str)
     parser_chstatus.add_argument("-s", "--successfile", help="change storage type success file list", type=str,
-                                 default=None)
+                                 default="./bchstatus/chstatus_success.txt")
     parser_chstatus.add_argument("-f", "--failurefile", help="change storage type failure file list", type=str,
-                                 default=None)
+                                 default="./bchstatus/chstatus_failed.txt")
     parser_chstatus.add_argument("-tc", "--threadcount", help="multiple thread count", type=int,
                                  default=3)
     parser_chstatus.add_argument("-S", "--sep", help="separator", type=str, default=",")
     parser_chstatus.set_defaults(func=Qcmd.batch_chstatus)
+
+    parser_bupload = sub_parser.add_parser("bupload", help="Batch upload file")
+    parser_bupload.add_argument("-D", "--dir", help="dir to upload", required=True, type=str)
+    parser_bupload.add_argument("-B", "--bucket", help="bucket name", required=True, type=str)
+    parser_bupload.add_argument("-s", "--successfile", help="upload success file list", type=str,
+                                default="./bupload/upload_success.txt")
+    parser_bupload.add_argument("-f", "--failurefile", help="upload failed file list", type=str,
+                                default="./bupload/upload_failed.txt")
+    parser_bupload.add_argument("-tc", "--threadcount", help="multiple thread count", type=int,
+                                default=3)
+    parser_bupload.set_defaults(func=Qcmd.batch_upload)
+
+    parser_bdelete = sub_parser.add_parser("bdelete", help="Batch delete file")
+    parser_bdelete.add_argument("-b", "--bucket", help="bucket name", required=True, type=str)
+    parser_bdelete.add_argument("-i", "--inputfile", help="input file", required=True, type=str)
+    parser_bdelete.add_argument("-s", "--successfile", help="upload success file list", type=str,
+                                default="./bdelete/delete_success.txt")
+    parser_bdelete.add_argument("-f", "--failurefile", help="upload failed file list", type=str,
+                                default="./bdelete/delete_failed.txt")
+    parser_bdelete.add_argument("-tc", "--threadcount", help="multiple thread count", type=int,
+                                default=3)
 
     args = parser.parse_args()
     try:
@@ -240,9 +263,19 @@ class Qcmd(object):
                 failurefile = args.failurefile
                 threadcount = args.threadcount
                 sep = args.sep
-                Batch = Batch_modtype(accesskey, secretkey, bucket_name, inputfile, sep, successfile, failurefile,
-                                      threadcount)
-                Batch.b_modtype()
+                modtype_success_logpath = os.path.split(successfile)[0]
+                modtype_failed_logpath = os.path.split(failurefile)[0]
+                if modtype_success_logpath == "./bmodtype" and modtype_failed_logpath == "./bmodtype":
+                    os.mkdir(modtype_success_logpath)
+                else:
+                    if os.path.exists(modtype_success_logpath) and os.path.exists(modtype_failed_logpath):
+                        Batch = Batch_modtype(accesskey, secretkey, bucket_name, inputfile, sep, successfile,
+                                              failurefile,
+                                              threadcount)
+                        Batch.b_modtype()
+                    else:
+                        return print("{0} or {1} not exist".format(successfile, failurefile))
+
             else:
                 return print("Login please enter \"qcmd account -h\" for help")
         except Exception as e:
@@ -263,9 +296,76 @@ class Qcmd(object):
                 failurefile = args.failurefile
                 threadcount = args.threadcount
                 sep = args.sep
-                Batch = Batch_chstatus(accesskey, secretkey, bucket_name, inputfile, sep, successfile, failurefile,
-                                       threadcount)
-                Batch.batch_chstatus()
+                chstatus_success_logpath = os.path.split(successfile)[0]
+                chstatus_failed_logpath = os.path.split(failurefile)[0]
+                if chstatus_success_logpath == "./bchstatus" and chstatus_failed_logpath == "./bchstatus":
+                    os.mkdir(chstatus_success_logpath)
+                else:
+                    if os.path.exists(chstatus_success_logpath) and os.path.exists(chstatus_failed_logpath):
+                        Batch = Batch_chstatus(accesskey, secretkey, bucket_name, inputfile, sep, successfile,
+                                               failurefile,
+                                               threadcount)
+                        Batch.batch_chstatus()
+                    else:
+                        return print("{0} or {1} not exist".format(successfile, failurefile))
+
+        except Exception as e:
+            logger.warn(e)
+            raise e
+
+    @staticmethod
+    def batch_upload(args):
+        try:
+            if os.path.exists("./.qcmd/.account.json"):
+                with open("./.qcmd/.account.json", "r") as f:
+                    ret = f.read().split(":")
+                    accesskey = ret[1]
+                    secretkey = ret[2]
+                file_dir = args.dir
+                bucket_name = args.bucket
+                successfile = args.successfile
+                failurefile = args.failurefile
+                threadcount = args.threadcount
+                upload_success_logpath = os.path.split(successfile)[0]
+                upload_failed_logpath = os.path.split(failurefile)[0]
+                if upload_success_logpath == "./bupload" and upload_failed_logpath == "./bupload":
+                    os.mkdir(upload_success_logpath)
+                else:
+                    if os.path.exists(upload_success_logpath) and os.path.exists(upload_failed_logpath):
+                        Batch = Batch_upload(accesskey, secretkey, file_dir, bucket_name, successfile, failurefile,
+                                             threadcount)
+                        Batch.batch_upload()
+                    else:
+                        return print("{0} or {1} not exist".format(successfile, failurefile))
+        except Exception as e:
+            logger.warn(e)
+            raise e
+
+    @staticmethod
+    def batch_delete(args):
+        try:
+            if os.path.exists("./.qcmd/.account.json"):
+                with open("./.qcmd/.account.json", "r") as f:
+                    ret = f.read().split(":")
+                    accesskey = ret[1]
+                    secretkey = ret[2]
+                inputfile = args.inputfile
+                bucket_name = args.bucket
+                successfile = args.successfile
+                failurefile = args.failurefile
+                threadcount = args.threadcount
+                upload_success_logpath = os.path.split(successfile)[0]
+                upload_failed_logpath = os.path.split(failurefile)[0]
+                if upload_success_logpath == "./bdelete" and upload_failed_logpath == "./bdelete":
+                    os.mkdir(upload_success_logpath)
+                else:
+                    if os.path.exists(upload_success_logpath) and os.path.exists(upload_failed_logpath):
+                        Batch = Batch_delete(accesskey, secretkey, bucket_name, inputfile, successfile, failurefile,
+                                             threadcount)
+                        Batch.batch_delete()
+                        print()
+                    else:
+                        return print("{0} or {1} not exist".format(successfile, failurefile))
         except Exception as e:
             logger.warn(e)
             raise e

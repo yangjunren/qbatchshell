@@ -14,8 +14,8 @@ logger = logging.getLogger("qcmd")
 
 
 class Batch_chstatus(object):
-    def __init__(self, access_key, secret_key, bucket_name, inputfile, sep, successfile=None,
-                 failurefile=None, thread_count=3):
+    def __init__(self, access_key, secret_key, bucket_name, inputfile, sep, successfile,
+                 failurefile, thread_count=3):
         self.access_key = access_key
         self.secret_key = secret_key
         self._inner_threadpool = SimpleThreadPool(3)
@@ -27,9 +27,12 @@ class Batch_chstatus(object):
         self.sep = sep
 
     def read_inputfile(self, inputfile):
+        ret = []
         with open(inputfile, "r") as f:
-            ret = tuple(f.readlines())
-        return ret
+            for line in f.readlines():
+                line = line.strip('\n')
+                ret.append(line)
+        return tuple(ret)
 
     def _chstatus(self, bucket_name, key, file_status, successfile, failurefile):
         try:
@@ -46,8 +49,6 @@ class Batch_chstatus(object):
         self._inner_threadpool = SimpleThreadPool(self.thread_count)
         inputfile_list = self.read_inputfile(self.inputfile)
         for i in inputfile_list:
-            if "\n" in i:
-                i = i.replace("\n", "")
             try:
                 _i = i.split(self.sep)
             except Exception as e:
@@ -71,6 +72,8 @@ if __name__ == '__main__':
     bucket_name = "*****"
     inputfile = "******"
     sep = ","
-    Batch = Batch_chstatus(access_key, secret_key, bucket_name, inputfile, sep)
+    successfile = "./successfile.txt"
+    failurefile = "./failurefile.txt"
+    Batch = Batch_chstatus(access_key, secret_key, bucket_name, inputfile, sep, successfile, failurefile)
     ret = Batch.batch_chstatus()
     print(ret)

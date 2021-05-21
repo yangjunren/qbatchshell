@@ -25,28 +25,45 @@ class WorkerThread(Thread):
         self._fail_task_num = 0
         self._ret = list()
 
+    def _bchstatus_bmodtype_args(self, result_args):
+        key, ret, successfile, failurefile = result_args
+        if ret.status_code == 200:
+            self._succ_task_num += 1
+            self._ret.append(ret)
+            succ_key = "success {0}".format(key)
+            write_file(successfile, succ_key)
+            return print(succ_key)
+        else:
+            self._fail_task_num += 1
+            fail_key = "failed {0}: {1}".format(key, ret.text_body)
+            write_file(failurefile, fail_key)
+            return print(fail_key)
+
+    def _bupload_args(self, result_args):
+        localfile, key, ret_info, successfile, failurefile = result_args
+        if ret_info.status_code == 200:
+            self._succ_task_num += 1
+            succ_info = "success {0} ----> {1}".format(localfile, key)
+            self._ret.append(ret_info)
+            write_file(successfile, succ_info)
+            return print(succ_info)
+        else:
+            self._fail_task_num += 1
+            fail_info = "success {0} ----> {1}".format(localfile, key)
+            write_file(failurefile, fail_info)
+            return print(fail_info)
+
     def run(self):
         while True:
             func, args, kwargs = self._task_queue.get()
             if func is None:
                 return
             try:
-                key, ret, successfile, failurefile = func(*args, **kwargs)
-                if ret.status_code == 200:
-                    self._succ_task_num += 1
-                    self._ret.append(ret)
-                    succ_key = "success {0}".format(key)
-                    if successfile:
-                        write_file(successfile, succ_key)
-                    else:
-                        return print(succ_key)
-                else:
-                    self._fail_task_num += 1
-                    fail_key = "failed {0}:{1}".format(key, ret.text_body)
-                    if failurefile:
-                        write_file(failurefile, fail_key)
-                    else:
-                        return print(fail_key)
+                result_args = func(*args, **kwargs)
+                if len(result_args) == 4:
+                    self._bchstatus_bmodtype_args(result_args)
+                elif len(result_args) == 5:
+                    self._bupload_args(result_args)
             except Exception as e:
                 logger.warn(str(e))
                 self._ret.append(e)
@@ -102,6 +119,7 @@ class SimpleThreadPool:
         succ_num = sum([tp[0] for tp in detail])
         fail_num = sum([tp[1] for tp in detail])
         return {'success_num': succ_num, 'fail_num': fail_num}
+
 
 if __name__ == '__main__':
 
